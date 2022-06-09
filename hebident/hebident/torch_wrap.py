@@ -24,7 +24,7 @@ class SpeciesClassifierNeuralNetwork(torch.nn.Module):  # inheriting from nn.Mod
 
     def __init__(self, num_species, num_features, layer_definition):
         # calls the init function of nn.Module.  Don't get confused by syntax,
-        # just always do it in an nn.Module
+        # just always do it in a nn.Module
         super(SpeciesClassifierNeuralNetwork, self).__init__()
 
         # Define the parameters that you will need.  In this case, we need A and b,
@@ -148,11 +148,7 @@ class TorchClassifier:
             values_array.append(index_dict[row])
         return torch.tensor(values_array)
 
-    def fit(self, training_df, training_target, testing_df, testing_target, print_function):
-        # print(f"{type(training_df)} :: {training_df}")
-        # print(f"{type(training_target)} :: {training_target}")
-        # print(list(training_df.columns))
-        # training_df.to_csv(r"C:\Users\pete\AppData\Local\Temp\training_df.csv", na_rep="NA")
+    def fit(self, training_df, training_target, print_function):
 
         index_dict, self.classes = self._make_index_dict_and_array(training_target)
         num_species = len(index_dict)

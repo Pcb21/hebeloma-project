@@ -13,6 +13,7 @@ import pandas as pd
 
 # local
 from .parse import SToSingle
+from .util import BlankLogger
 
 
 COLL_ID_NOT_PRESENT = 56
@@ -21,17 +22,26 @@ COLL_ID_NOT_IN_TRAINING_SET = 58
 species_generalised_section_data = {}
 
 
-def species_generalised_section(sp):
+def sgs_filename():
+    return os.path.join(os.path.dirname(__file__), "sgs.csv")
+
+
+def _ensure_sgs_data():
     global species_generalised_section_data
     if not species_generalised_section_data:
-        with open(os.path.join(os.path.dirname(__file__), "sgs.csv"), "r") as csvfile:
+        with open(sgs_filename(), "r") as csvfile:
             r = csv.reader(csvfile, delimiter=',', quotechar='|')
             for row in r:
                 name, gs, continents = row
                 species_generalised_section_data[name] = gs, continents
-    if sp not in species_generalised_section_data:
+    return species_generalised_section_data
+
+
+def species_generalised_section(sp):
+    sgs_data = _ensure_sgs_data()
+    if sp not in sgs_data:
         raise RuntimeError(f"Can't identify section for '{sp}'")
-    return species_generalised_section_data[sp][0]
+    return sgs_data[sp][0]
 
 
 class BadIdentifierValue(RuntimeError):
@@ -44,19 +54,6 @@ class _PrintLogger:
     def write(msg):
         print(msg)
 
-
-class _BlankLogger:
-
-    @staticmethod
-    def write(msg):
-        pass
-
-
-class _NotPresentTag:
-    pass
-
-
-_NotPresent = _NotPresentTag()
 
 
 class CFieldHelper:
@@ -71,12 +68,12 @@ class CFieldHelper:
         # If I remember rightly, a simple [False]*len(self.primary_names) had referencing problems
         sz = len(self.primary_names)
         out = []
-        for i in range(sz):
+        for _ in range(sz):
             out.append(False)
         return out
 
     def _parse_core(self, ts):
-        # Given an semi-colon input string of features, returns a True/False
+        # Given a semicolon input string of features, returns a True/False
         # string where the input string has properties
         elems = ts.split(";")
         elems = [e.replace(' (?)', '').replace(' ', '').replace('-', "").strip().lower() for e in elems]
@@ -86,8 +83,6 @@ class CFieldHelper:
             for elem in elems:
                 if elem in self.mapping_dict:
                     out[self.mapping_dict[elem]] = True
-                # else:
-                #    print(f"Property '{elem}' encountered, but this was not assigned in the dictionary")
             return True, out
         else:
             return False, self._make_false_array()
@@ -178,43 +173,32 @@ class ParserBase(abc.ABC):
         self.request_name = request_name
         self.column_names = column_names
 
-    def train_from_coll(self, coll, verbose):
-        value = getattr(coll, self.db_name, _NotPresent)
-        if isinstance(value, _NotPresentTag):
-            raise RuntimeError(f"{self.db_name} is not a valid database field name (type of coll: {type(coll)}")
-        return self.train(value, verbose)
+    def train_from_input_getter(self, input_getter, logger, use_dbname_not_request_name: bool):
+        field_name = self.db_name if use_dbname_not_request_name else self.request_name
+        value = input_getter(field_name)
+        return self.train(value, logger)
 
-    def transform_from_coll(self, coll, verbose):
-        value = getattr(coll, self.db_name, None)
-        if verbose:
-            print(f"For DB name {self.db_name}, value is {value}")
-            logger = _PrintLogger()
-        else:
-            logger = _BlankLogger()
-        ret = self.transform(value, empty_is_trustworthy=False, logger=logger)
-        if verbose:
-            print(f"The transformed value is {ret}")
-        return ret
-
-    def data_from_coll(self, coll):
-        return self.db_name, getattr(coll, self.db_name)
-
-    def transform_from_req(self, input_getter, logger):
-        input_value = input_getter(self.request_name)
+    def transform_from_input_getter(self, input_getter, logger, empty_is_trustworthy: bool, use_dbname_not_request_name: bool):
+        # Need to use dbname when getting from a collection
+        # And request name when getting from a web request
+        # (Not really sure why these aren't unified upstream....)
+        field_name = self.db_name if use_dbname_not_request_name else self.request_name
+        input_value = input_getter(field_name)
         logger.write(f"{self.request_name} received value {input_value}")
-        transformed_value = self.transform(input_value, empty_is_trustworthy=True, logger=logger)
+        transformed_value = self.transform(input_value, empty_is_trustworthy=empty_is_trustworthy, logger=logger)
         logger.write(f"{self.request_name} transformed value to {transformed_value}")
         return transformed_value
 
-    def coll_value(self, coll):
-        return getattr(coll, self.db_name, None)
+    def data_from_coll(self, coll):
+        # Ultimately used in _collection_identifier_compare_impl
+        return self.db_name, getattr(coll, self.db_name)
 
     @abc.abstractmethod
     def transform(self, x, empty_is_trustworthy, logger):
         assert False
 
     @abc.abstractmethod
-    def train(self, x, verbose):
+    def train(self, x, logger):
         assert False
 
     @abc.abstractmethod
@@ -228,7 +212,7 @@ class StringContainsParser(ParserBase):
         self.elems = [e.lower() for e in elems]
         super().__init__(db_name, request_name, [request_name + e for e in elems])
 
-    def train(self, _value, _verbose):
+    def train(self, _value, _logger):
         pass
 
     def transform(self, this_string, empty_is_trustworthy, logger):
@@ -264,7 +248,7 @@ class SporeFeatureParser(ParserBase):
         self.obs_range = [(f"0.0 ({self.min_number})", f"1.0 ({self.max_number})")]
         super().__init__(db_name, request_name, ["SporeFeature" + self.initial_letter])
 
-    def train(self, _value, _verbose):
+    def train(self, _value, _logger):
         pass
 
     def transform(self, this_string, empty_is_trustworthy, logger):
@@ -308,7 +292,7 @@ class CheiloShapeParser(ParserBase):
                               "CheiloClavateVentricose"])
             self.impl = CheiloShapes()
 
-    def train(self, _value, _verbose):
+    def train(self, _value, _logger):
         pass
 
     def transform(self, this_string, empty_is_trustworthy, logger):
@@ -323,7 +307,7 @@ class AssociatesWithParser(ParserBase):
     def __init__(self, request_name):
         super().__init__("associated_ecm_families_objs", request_name, ["Pinaceae", "Salicaceae", "Fagaceae"])
 
-    def train(self, _value, _verbose):
+    def train(self, _value, _logger):
         pass
 
     def transform(self, values, empty_is_trustworthy, logger):
@@ -376,7 +360,7 @@ class IgnoreZeroInfNaNParserBase(ParserBase):  # noqa
         self._ensure_sorted()
         return self.values[len(self.values) - 1]
 
-    def plot_distribution(self, logger=_BlankLogger()):
+    def plot_distribution(self, logger=BlankLogger()):
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots()
         num_points = 1000
@@ -490,7 +474,7 @@ class IgnoreZeroInfNaNParser(IgnoreZeroInfNaNParserBase):
         else:
             return self.parser
 
-    def train(self, this_float, _verbose):
+    def train(self, this_float, _logger):
         self.train_(this_float)
 
     def transform(self, incoming, empty_is_trustworthy, logger):
@@ -515,10 +499,9 @@ class IgnoreZeroInfNaNParserSToSingle(IgnoreZeroInfNaNParserBase):
         self.preprocessor = SToSingle(request_name)
         super().__init__(db_name, request_name, figure_display_name)
 
-    def train(self, s_string, verbose):
+    def train(self, s_string, _logger):
         pp_value = self.preprocessor.parse(s_string)
-        if verbose:
-            print(f"The preprocessed value is {pp_value}")
+        # logger(f"IgnoreZeroInfNaNParserSToSingle: The preprocessed value is {pp_value}")
         self.train_(pp_value)
 
     def transform(self, s_string, empty_is_trustworthy, logger):
@@ -532,7 +515,7 @@ class JustValueParser(ParserBase):
     def __init__(self, db_name, request_name):
         super().__init__(db_name, request_name, column_names=[request_name])
 
-    def train(self, _incoming, _verbose):
+    def train(self, _incoming, _logger):
         pass
 
     def transform(self, incoming, empty_is_trustworthy, logger):
@@ -548,7 +531,7 @@ class IsEqualToStringParser(ParserBase):
         self.targets = [t.lower for t in targets]
         super().__init__(db_name, request_name, [request_name + t for t in targets])
 
-    def train(self, _incoming, _verbose):
+    def train(self, _incoming, _logger):
         pass
 
     def transform(self, incoming, empty_is_trustworthy, logger):
@@ -568,7 +551,7 @@ class YesNoUnknownParser(ParserBase):
         super().__init__(db_name, request_name, [request_name])
         self.value_for_unknown = value_for_unknown
 
-    def train(self, _incoming, _verbose):
+    def train(self, _incoming, _logger):
         pass
 
     def transform(self, incoming, empty_is_trustworthy, logger):
@@ -616,7 +599,7 @@ core_parsers = [
                 (IgnoreZeroInfNaNParserSToSingle("stipe_median_width_mm", "StipeMedianWidth", "Stipe width (mm)"), True, False, False, False, False, False, False, False, False, False, False, False, False, False),
                 (IgnoreZeroInfNaNParserSToSingle("number_of_complete_lamellae", "NoOfCompleteLamellae", "No of complete lamellae"), True, True, True, True, True, True, True, True, True, False, False, True, True, True),
 
-                (YesNoUnknownParser("pileus_characters_remains_of_universal_veil", "RemainsOfUniversalVeil", value_for_unknown=None), True, False, False, False, False, False, False, False, False, False, False , False, False, False),
+                (YesNoUnknownParser("pileus_characters_remains_of_universal_veil", "RemainsOfUniversalVeil", value_for_unknown=None), True, False, False, False, False, False, False, False, False, False, False, False, False, False),
                                                                              # 1    2       3    4     5    6      7    8      9    10     11   12
                 (IgnoreZeroInfNaNParser("latitude", "Latitude", "Latitude"), True, True, True, True, True, True, True, True, True, True, True, True, False, False),
                 (IgnoreZeroInfNaNParser("longitude", "Longitude", "Longitude"), True, True, True, True, True, True, True, True, True, True, True, True, False, False),
@@ -688,6 +671,7 @@ def _make_subclassifier_applies_funcs(parsers_names: Iterable[str]):
             raise RuntimeError(f"Unable to assign parsers_name {parsers_name} to a subclassifier applies function")
     return res
 
+
 def _make_filters(include_continent_pre_filter, parsers_names: Iterable[str]):
     if not include_continent_pre_filter:
         return []
@@ -733,7 +717,6 @@ def _make_parsers(parsers_names: Iterable[str]):
             # this core parser
             result.append((parser_config[0], these_indexes))
     return result
-
 
 
 class HebelomaTrainer:
@@ -816,20 +799,12 @@ class HebelomaTrainer:
     def target_columns():
         return ["Species", "Section"]
 
-    def train_from_coll(self, coll, verbose):
+    def train_from_input_getter(self, input_getter, logger, use_dbname_not_request_name: bool):
         # When training from collection
         # We get all the data for all filters and all parsers
         # at once (compare below for transforming from request, which is per classifier)
         for parser, _ in self.feature_parsers_master:
-            parser.train_from_coll(coll, verbose)
-
-    def transform_from_coll(self, coll, classifier_number):
-        # E.g. called from collections.html
-        filter_res = [getattr(coll, column_name) for column_name in self.filter_columns(classifier_number)]
-        regress_res = []
-        for p in self.feature_parsers(classifier_number):
-            regress_res += p.transform_from_coll(coll, verbose=False)
-        return filter_res, regress_res
+            parser.train_from_input_getter(input_getter=input_getter, logger=logger, use_dbname_not_request_name=use_dbname_not_request_name)
 
     def data_from_coll(self, coll, classifier_number):
         keys = self.filter_columns(classifier_number)
@@ -840,7 +815,7 @@ class HebelomaTrainer:
             values.append(this_value)
         return keys, values
 
-    def transform_from_request(self, input_getter, classifier_number, logger):
+    def transform_from_input_getter(self, input_getter, classifier_number, logger, empty_is_trustworthy: bool, use_dbname_not_request_name: bool):
         filter_res = []
         logger.write(f"Transforming for classifier {classifier_number}")
         for field in self.filter_columns(classifier_number):
@@ -849,7 +824,7 @@ class HebelomaTrainer:
             logger.write(f"Filter field {field} has value {value}")
         regress_res = []
         for p in self.feature_parsers(classifier_number):
-            value = p.transform_from_req(input_getter, logger)
+            value = p.transform_from_input_getter(input_getter, logger, empty_is_trustworthy, use_dbname_not_request_name)
             regress_res += value
         return filter_res, regress_res
 
@@ -1027,13 +1002,12 @@ class ValueSeenFilterFunc:
         return target_class not in self.seen_values[value]
 
 
-# THIS NEEDS A SPECIES <-> SPECIES GENERALISED SECTION <-> CONTINENTS map
 def _make_continent_filter_func():
     from .parse import parse_formatted_string
     res = ValueSeenFilterFunc()
-    for sp in Species.objects.all():  # noqa  # This is ok, the higher level filtering on species in the identifier will prevent any unallowed species from kicking in.
-        seen_continents = parse_formatted_string(sp.continent).keys()
-        section = species_generalised_section(sp)
+    sgs_data = _ensure_sgs_data()
+    for sp, (section, continent_data_for_sp) in sgs_data.items():
+        seen_continents = parse_formatted_string(continent_data_for_sp).keys()
         for cont in seen_continents:
             # We only trust our Europe and Northern America data
             # For all the others we allow all possible species
@@ -1041,6 +1015,7 @@ def _make_continent_filter_func():
                 res.add_seen(sp.name, cont)
                 res.add_seen(section, cont)
     return res
+
 
 class SubClassifier:
 
@@ -1116,7 +1091,7 @@ class SubClassifier:
         # There's a possible pathological case
         # Where the classifier has assigned zero probability
         # to all the non-filtered. This would be a bad sign,
-        # but is possible..
+        # but is possible...!
         # Otherwise rescale up-to 1.0
         # (A more sophisticated approach would not reduce
         #  all filtered out fields prob by 100% but by some smaller
@@ -1185,6 +1160,38 @@ class SubClassifier:
             return chances_so_far
 
 
+def _alpha_tune_result(untuned_result, confidence_alpha, logger):
+    if confidence_alpha is None:
+        return untuned_result
+
+    logger.write("Untuned result")
+    for n, p in untuned_result:
+        logger.write(f"{n}: {p}")
+    # Recall that we have probabilities derived from scores as if
+    # P(i) = exp(S(i)) / Sum_j exp(S(j))
+    # If we, post-hoc, think that these probabilities are too confident
+    # then we can de-tune them by applying a confidence parameter alpha
+    # P'(i) = exp(alpha*S(i)) / Sum_j exp(alpha*S(j))
+    # where alpha = 0: No confidence at all: Give all species equal probability
+    #       alpha < 1: Less confident than original prediction
+    #       alpha = 1: Same confidence
+    #       alpha > 1: More confident than original prediction (not recommended!)
+    if confidence_alpha <= 0.0:
+        raise RuntimeError(f"Bad confidence alpha: {confidence_alpha}")
+    elif confidence_alpha == 1.0:
+        logger.write("Confidence alpha is 1 - returning untuned result")
+        return untuned_result
+    else:
+        from .metrics import invert_softmax
+        probs = [p for _, p in untuned_result]
+        new_probs = invert_softmax(probs, confidence_alpha)
+        new_result = [(name, new_probs[i]) for i, (name, old_prob) in enumerate(untuned_result)]
+        logger.write("Tuned result")
+        for n, p in new_result:
+            logger.write(f"{n}: {p}")
+        return new_result
+
+
 class ClassifierEx:
 
     """
@@ -1206,60 +1213,21 @@ class ClassifierEx:
 
     def coll_id_to_set_type(self, coll_id):
         # ONE **MUST** NOT USE the collection ID
-        # (if supplied) in the classifier.. that would be cheating!!
+        # (if supplied) in the classifier - that would be cheating!!
         coll_id_class = COLL_ID_NOT_PRESENT
         if coll_id:
             present = coll_id in self.trainer_impl.training_set_ids
             coll_id_class = COLL_ID_IN_TRAINING_SET if present else COLL_ID_NOT_IN_TRAINING_SET
         return coll_id, coll_id_class
 
-    def _classify_from_request_or_coll(self, transform_method):
+    def classify_from_input_getter(self, input_getter, logger, confidence_alpha, empty_is_trustworthy: bool, use_dbname_not_request_name: bool):
         chances_so_far = []
         for ix, subc in enumerate(self.subclassifiers):
-            filter_values, regress_values = transform_method(ix)
+            filter_values, regress_values = self.trainer_impl.transform_from_input_getter(input_getter, ix, logger, empty_is_trustworthy, use_dbname_not_request_name)
             chances_so_far = subc.classify_impl(filter_values, regress_values, chances_so_far)
-        # Return the last classification
-        return chances_so_far[-1]
 
-    def classify_from_request(self, input_getter, logger, confidence_alpha):
-
-        def transformer(ix):
-            return self.trainer_impl.transform_from_request(input_getter, ix, logger)
-
-        untuned_result = self._classify_from_request_or_coll(transformer)
-        logger.write("Untuned result")
-        for n, p in untuned_result:
-            logger.write(f"{n}: {p}")
-        # Recall that we have probabilities derived from scores as if
-        # P(i) = exp(S(i)) / Sum_j exp(S(j))
-        # If we, post-hoc, think that these probabilities are too confident
-        # then we can de-tune them by applying a confidence parameter alpha
-        # P'(i) = exp(alpha*S(i)) / Sum_j exp(alpha*S(j))
-        # where alpha = 0: No confidence at all: Give all species equal probability
-        #       alpha < 1: Less confident then original prediction
-        #       alpha = 1: Same confidence
-        #       alpha > 1: More confident than original prediction (not recommended!)
-        if confidence_alpha <= 0.0:
-            raise RuntimeError(f"Bad confidence alpha: {confidence_alpha}")
-        elif confidence_alpha == 1.0:
-            logger.write("Confidence alpha is 1 - returning untuned result")
-            return untuned_result
-        else:
-            from . import invert_softmax
-            probs = [p for _, p in untuned_result]
-            new_probs = invert_softmax.invert_softmax(probs, confidence_alpha)
-            new_result = [(name, new_probs[i]) for i, (name, old_prob) in enumerate(untuned_result)]
-            logger.write("Tuned result")
-            for n, p in new_result:
-                logger.write(f"{n}: {p}")
-            return new_result
-
-    def classify_from_coll(self, coll):
-
-        def transformer(ix):
-            return self.trainer_impl.transform_from_coll(coll, ix)
-
-        return self._classify_from_request_or_coll(transformer)
+        # Use the last classification and maybe retune probabilities
+        return _alpha_tune_result(chances_so_far[-1], confidence_alpha, logger)
 
     def data_from_coll(self, coll):
         # A palaver to return things (more or less) in "feature order"

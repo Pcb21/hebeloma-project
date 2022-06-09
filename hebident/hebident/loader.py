@@ -42,10 +42,10 @@ def _accumulate_by_id_data_section(by_id_data):
 
 def _accumulate_by_id_data(by_id_data):
     """
-    The saved down data in the DILL files has a lot of information (a full 'guesses_array'
+    The saved down data in the DILL files has a lot of information (a full 'guesses_array')
     for each collection we tried to classify in the training set
 
-    This consume a lot of memory and can fail in limited memory environment such as AWS - so thin it down here!
+    This consumes a lot of memory and can fail in limited memory environment such as AWS - so thin it down here!
     """
     # results is a dict of (id: pos_ix, real_name, guesses_array)
     results = by_id_data
@@ -89,7 +89,7 @@ def _accumulate_by_id_data(by_id_data):
             probs_of_correct.append((specimen_id, classifier_species_probability))
             # Here is where you can hack it if you need to find an ID that the identifier worked for
             # if actual_name == "eburneum":
-            #   print(f"EBUREUM correct! {specimen_id}")
+            #   print(f"eburneum correct! {specimen_id}")
             continue  # Ignore the ones we got right
 
         probs_of_incorrect.append((specimen_id, classifier_species_probability, classifier_top_prob))
@@ -135,6 +135,14 @@ class Loader(dill.Unpickler):
         # Backwards compatibility for old structure of files
         if module == "hebeloma.torch_wrap":
             module = "hebident.torch_wrap"
+        if module == "hebeloma.views_identifier":
+            module = "hebident.core"
+        if module == "hebeloma.views_utils" and name in ("parse_lat", "parse_lng"):
+            module = "hebident.geography"
+        if module == "hebeloma.parse_utils" and name in ("SToSingle",):
+            module = "hebident.parse"
+        if module.startswith("hebeloma"):
+            raise RuntimeError(f"Oh dear ... still looking for {module}::{name}")
         return super().find_class(module, name)
 
 

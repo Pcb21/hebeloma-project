@@ -40,7 +40,7 @@ class C2Finder:
         return [math.exp(alphaS_i - c2) for alphaS_i in self.alpha_scores]
 
     def final_alt_probs(self, c2):
-        print(f"alpha was {self.alpha}: Final C2 was: {c2}")
+        # print(f"alpha was {self.alpha}: Final C2 was: {c2}")
         alt_large_probs = self._alt_probs_impl(c2)
         if not self.small_indexes:
             return alt_large_probs  # no small probs to re-integrate back in
