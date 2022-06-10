@@ -596,10 +596,10 @@ core_parsers = [
                 (IgnoreZeroInfNaNParser("cheilocystidia_q2_ab", "CheiloQ_AB", "Cheilocystidia A/B ratio"), True, False, True, True, False, True, True, True, True, False, False, False, False, False),
                 (IgnoreZeroInfNaNParser("cheilocystidia_q3_bm", "CheiloQ_BM", "Cheilocystidia B/M ratio"), True, False, True, True, False, True, True, True, True, False, False, False, False, False),
                 (IgnoreZeroInfNaNParser("basidia_q_average", "BasidiaQ", "Basidia Q ratio"), True, False, False, False, False, False, False, True, True, False, False, False, False, True),
-                (IgnoreZeroInfNaNParserSToSingle("stipe_median_width_mm", "StipeMedianWidth", "Stipe width (mm)"), True, False, False, False, False, False, False, False, False, False, False, False, False, False),
+                # (IgnoreZeroInfNaNParserSToSingle("stipe_median_width_mm", "StipeMedianWidth", "Stipe width (mm)"), True, False, False, False, False, False, False, False, False, False, False, False, False, False),
                 (IgnoreZeroInfNaNParserSToSingle("number_of_complete_lamellae", "NoOfCompleteLamellae", "No of complete lamellae"), True, True, True, True, True, True, True, True, True, False, False, True, True, True),
 
-                (YesNoUnknownParser("pileus_characters_remains_of_universal_veil", "RemainsOfUniversalVeil", value_for_unknown=None), True, False, False, False, False, False, False, False, False, False, False, False, False, False),
+                # (YesNoUnknownParser("pileus_characters_remains_of_universal_veil", "RemainsOfUniversalVeil", value_for_unknown=None), True, False, False, False, False, False, False, False, False, False, False, False, False, False),
                                                                              # 1    2       3    4     5    6      7    8      9    10     11   12
                 (IgnoreZeroInfNaNParser("latitude", "Latitude", "Latitude"), True, True, True, True, True, True, True, True, True, True, True, True, False, False),
                 (IgnoreZeroInfNaNParser("longitude", "Longitude", "Longitude"), True, True, True, True, True, True, True, True, True, True, True, True, False, False),
@@ -608,7 +608,7 @@ core_parsers = [
                 # (CheiloShapeParser("cheilocystidia_main_shape", "CheiloShape", include_pyriform=False), False, True, True, True, False, True, False, False),
                 (CheiloShapeParser("cheilocystidia_main_shape", "CheiloShape", include_pyriform=True), True, True, True, True, False, False, True, True, True, False, True, False, False, False),
 
-                (YesNoUnknownParser("smell_sacchariolentia", "Smell", value_for_unknown=None), True, False, False, False, False, False, False, False, False, False, False, False, False, False),
+                # (YesNoUnknownParser("smell_sacchariolentia", "Smell", value_for_unknown=None), True, False, False, False, False, False, False, False, False, False, False, False, False, False),
 
                 (AssociatesWithParser("AssociatesWith"), True, False, False, False, False, False, False, False, True, False, False, False, False, False)
                 ]
@@ -639,6 +639,23 @@ parser_indexes = {"CG4": 2,     # CG names are the names used in the paper == v7
                   "v13": 7,
                   "v14": 8,   # v13 plus basidia
                   "v15": 9}   # v14 plus assoc
+
+
+def determine_used_parsers():
+    global core_parsers
+    reverse_list = [None, None, "CG4", "CG5", "CG6", None, None, "CG7", "CG8", "CG9", "CG1", "CG2", "CG3", "CG10", "CG11"]
+    for parser_tuple in core_parsers:
+        column_names = parser_tuple[0].column_names
+        usages = []
+        for i in range(1, len(reverse_list)):
+            used_in_index = parser_tuple[i]
+            used_in_this_cg = used_in_index and reverse_list[i] is not None
+            if used_in_this_cg:
+                usages.append(reverse_list[i])
+        if usages:
+            print(f"{column_names} appears to be used by {','.join(usages)}")
+        else:
+            print(f"{column_names} appears to be UNUSED by any CG")
 
 
 def identifier_all_features_string():

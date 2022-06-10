@@ -53,11 +53,13 @@ You can create your own identifiers from a command line with the following comma
 ```
 python -m hebident.create_cli <path to collection data - a .csv file>
 ```
-TODO: Document the format of the CSV file here
+The first row of the CSV file are the header columns. Each remaining row represents a collection.
+The exact column headings required depend on the Character Group used.  
+The example data contains all the columns needed to use any of the Character Groups CG1 through CG11 described in the paper referenced. 
 
-Some example data is given in hebident/examples/collection_examples.csv
-
-TODO: ACTUALLY CREATE THE EXAMPLE DATA!!!
+Example collections data is given in hebident/examples/collections_may2022_transformed.csv. 
+This is the full dataset used to obtain the results published in the paper. 
+Note the data is given in 'transformed' format where 0 is minimum possible value of the feature and 1 is the maximum possible value - further details of transformations are given in the paper. 
 
 ## Licence
 
