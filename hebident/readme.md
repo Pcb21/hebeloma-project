@@ -50,7 +50,6 @@ An example identifier is given in hebident/examples/cg7_example_species.dill
 ## Creating your own identifier 
 
 You can create your own identifiers from a command line with the following command 
-
 ```
 python -m hebident.create_cli <path to collection data - a .csv file>
 ```
@@ -59,6 +58,16 @@ TODO: Document the format of the CSV file here
 Some example data is given in hebident/examples/collection_examples.csv
 
 TODO: ACTUALLY CREATE THE EXAMPLE DATA!!!
+
+## Licence
+
+This software is licenced for use under the GNU General Public License v3.
+
+## Contact
+
+For any queries relating to the software, please contact pete@hebeloma.org, thank you.
+
+
 
 
 

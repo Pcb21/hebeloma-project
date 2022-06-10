@@ -184,9 +184,9 @@ class ParserBase(abc.ABC):
         # (Not really sure why these aren't unified upstream....)
         field_name = self.db_name if use_dbname_not_request_name else self.request_name
         input_value = input_getter(field_name)
-        logger.write(f"{self.request_name} received value {input_value}")
+        # logger.write(f"{self.request_name} received value {input_value}")
         transformed_value = self.transform(input_value, empty_is_trustworthy=empty_is_trustworthy, logger=logger)
-        logger.write(f"{self.request_name} transformed value to {transformed_value}")
+        # logger.write(f"{self.request_name} transformed value to {transformed_value}")
         return transformed_value
 
     def data_from_coll(self, coll):
@@ -323,7 +323,7 @@ class AssociatesWithParser(ParserBase):
             for assoc in objs:
                 for ix, col_name in enumerate(self.column_names):
                     if assoc.name.lower() == col_name.lower():
-                        logger.write(f"GOT A MATCH ON {assoc.name}")
+                        # logger.write(f"GOT A MATCH ON {assoc.name}")
                         base[ix] = 1.0
             return base
 
@@ -431,15 +431,15 @@ class IgnoreZeroInfNaNParserBase(ParserBase):  # noqa
 
     def transform_(self, this_float, empty_is_trustworthy, logger):
         if not self._is_bad(this_float):
-            logger.write(f"{self.request_name}: {this_float} is not bad, will imply a value from {len(self.values)} that have been stored.")
+            # logger.write(f"{self.request_name}: {this_float} is not bad, will imply a value from {len(self.values)} that have been stored.")
             ret = self._find_implied_value(this_float, logger)
-            logger.write(f"{self.request_name}: Returning {ret}")
+            # logger.write(f"{self.request_name}: Returning {ret}")
             return [ret]
         else:
             if empty_is_trustworthy:
                 raise BadIdentifierValue(f"This identifier requires a value for '{self.request_name}'")
             else:
-                logger.write(f"{self.request_name}: Bad value - returning None")
+                # logger.write(f"{self.request_name}: Bad value - returning None")
                 return [None]
 
     def observed_ranges(self):
@@ -506,7 +506,7 @@ class IgnoreZeroInfNaNParserSToSingle(IgnoreZeroInfNaNParserBase):
 
     def transform(self, s_string, empty_is_trustworthy, logger):
         pp_value = self.preprocessor.parse(s_string)
-        logger.write(f"The preprocessed value is {pp_value}")
+        # logger.write(f"The preprocessed value is {pp_value}")
         return self.transform_(pp_value, empty_is_trustworthy, logger)
 
 

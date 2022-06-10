@@ -23,6 +23,9 @@ class PrintToScreenAndFile:
         self.f = open(output_filename, "w")
 
     def __call__(self, msg):
+        self.write(msg)
+
+    def write(self, msg):
         self.f.write(msg + "\n")
         self.f.flush()
         os.fsync(self.f.fileno())

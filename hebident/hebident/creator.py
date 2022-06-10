@@ -17,7 +17,7 @@ import pandas as pd
 from .core import HebelomaTrainer, ClassifierEx, SubClassifier
 from .torch_wrap import TorchClassifier
 from .metrics import f1m_score_for_class
-from .util import DurationEstimator, PrintToScreenAndFile, nothing_printer
+from .util import DurationEstimator, nothing_printer
 
 
 def _set_seeds():
@@ -392,7 +392,8 @@ def _create_and_test_identifier_pair(intermediate_output_directory,
 
 
 def create_classifiers(collections_df: pd.DataFrame,
-                       output_directory: str):
+                       output_directory: str,
+                       logger):
     """
     Args:
         collections_df: This is a dataframe where the rows are collections and the columns are features
@@ -406,9 +407,7 @@ def create_classifiers(collections_df: pd.DataFrame,
     Returns:
     """
     os.makedirs(output_directory, exist_ok=True)
-    output_log_file = os.path.join(output_directory, "identifier_creator.log")
-
-    laconic_print_function = PrintToScreenAndFile(output_log_file)
+    laconic_print_function = logger
     verbose_print_function = nothing_printer
 
     experiments = []
